@@ -22,7 +22,7 @@ class TargetSpace(object):
     >>> y = space.register_point(x)
     >>> assert self.max_point()['max_val'] == y
     """
-    def __init__(self, target_func, pbounds, random_state=None):
+    def __init__(self, target_func, pbounds, pcons, random_state=None):
         """
         Parameters
         ----------
@@ -32,6 +32,10 @@ class TargetSpace(object):
         pbounds : dict
             Dictionary with parameters names as keys and a tuple with minimum
             and maximum values.
+
+        pcons : dict
+            Dictionary with constraints for input parameters
+
 
         random_state : int, RandomState, or None
             optionally specify a seed for a random number generator
@@ -48,6 +52,8 @@ class TargetSpace(object):
             [item[1] for item in sorted(pbounds.items(), key=lambda x: x[0])],
             dtype=np.float
         )
+
+        self._cons = pcons
 
         # preallocated memory for X and Y points
         self._params = np.empty(shape=(0, self.dim))
@@ -86,6 +92,10 @@ class TargetSpace(object):
     @property
     def bounds(self):
         return self._bounds
+
+    @property
+    def cons(self):
+        return self._cons
 
     def params_to_array(self, params):
         try:

@@ -4,7 +4,7 @@ from scipy.stats import norm
 from scipy.optimize import minimize
 
 
-def acq_max(ac, gp, y_max, bounds, random_state, n_warmup=10000, n_iter=10):
+def acq_max(ac, gp, y_max, bounds, constraints, random_state, n_warmup=10000, n_iter=10):
     """
     A function to find the maximum of the acquisition function
 
@@ -52,19 +52,23 @@ def acq_max(ac, gp, y_max, bounds, random_state, n_warmup=10000, n_iter=10):
                                    size=(n_iter, bounds.shape[0]))
     for x_try in x_seeds:
         # Find the minimum of minus the acquisition function
+
+    
         res = minimize(lambda x: -ac(x.reshape(1, -1), gp=gp, y_max=y_max),
                        x_try.reshape(1, -1),
                        bounds=bounds,
-                       method="L-BFGS-B")
+                       constraints=constraints,
+                       method="SLSQP")
+
 
         # See if success
         if not res.success:
             continue
 
         # Store it if better than previous minimum(maximum).
-        if max_acq is None or -res.fun[0] >= max_acq:
+        if max_acq is None or -res.fun >= max_acq:
             x_max = res.x
-            max_acq = -res.fun[0]
+            max_acq = -res.fun
 
     # Clip output to make sure it lies within the bounds. Due to floating
     # point technicalities this is not always the case.
@@ -76,15 +80,13 @@ class UtilityFunction(object):
     An object to compute the acquisition functions.
     """
 
-    def __init__(self, kind, kappa, xi, kappa_decay=1, kappa_decay_delay=0):
-
+    def __init__(self, kind, kappa, xi):
+        """
+        If UCB is to be used, a constant kappa is needed.
+        """
         self.kappa = kappa
-        self._kappa_decay = kappa_decay
-        self._kappa_decay_delay = kappa_decay_delay
 
         self.xi = xi
-        
-        self._iters_counter = 0
 
         if kind not in ['ucb', 'ei', 'poi']:
             err = "The utility function " \
@@ -93,12 +95,6 @@ class UtilityFunction(object):
             raise NotImplementedError(err)
         else:
             self.kind = kind
-
-    def update_params(self):
-        self._iters_counter += 1
-
-        if self._kappa_decay < 1 and self._iters_counter > self._kappa_decay_delay:
-            self.kappa *= self._kappa_decay
 
     def utility(self, x, gp, y_max):
         if self.kind == 'ucb':
@@ -121,10 +117,9 @@ class UtilityFunction(object):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             mean, std = gp.predict(x, return_std=True)
-  
-        a = (mean - y_max - xi)
-        z = a / std
-        return a * norm.cdf(z) + std * norm.pdf(z)
+
+        z = (mean - y_max - xi)/std
+        return (mean - y_max - xi) * norm.cdf(z) + std * norm.pdf(z)
 
     @staticmethod
     def _poi(x, gp, y_max, xi):
